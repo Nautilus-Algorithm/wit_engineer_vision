@@ -1,18 +1,19 @@
-"""shm_pkg —— /dev/shm mmap 三缓冲共享图像, 绕开 DDS 大图拷贝。
+"""shm —— /dev/shm mmap 三缓冲共享图像, 绕开 DDS 大图拷贝。
 
 设计对标 ~/awakening/3rdparty/daedalus_interface (C++ 的 shm_region / shm_client),
-用途: ros2_camera_pkg 相机节点做生产者, detector / solver 做消费者, 零拷贝取帧。
+用途: camera 相机节点做生产者, detector / solver 做消费者, 零拷贝取帧。
 
 典型用法:
     # 生产者 (相机节点)
-    from shm_pkg import ImagePublisher, load_shm_config
+    from shm import ImagePublisher, load_shm_config
     cfg = load_shm_config()
-    pub = ImagePublisher(cfg.region, cfg.max_height, cfg.max_width,
+    # height/width 取相机实际输出分辨率 (config/camera.yaml)
+    pub = ImagePublisher(cfg.region, height, width,
                          cfg.max_channels, cfg.numpy_dtype(), cfg.n_slots)
     pub.publish(bgr_frame)              # 每帧调用
 
     # 消费者 (detector / solver)
-    from shm_pkg import ImageSubscriber, load_shm_config
+    from shm import ImageSubscriber, load_shm_config
     sub = ImageSubscriber(load_shm_config().region)
     frame = sub.try_recv()              # 零拷贝视图, 无新帧则 None
     if frame is not None:

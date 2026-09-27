@@ -1,7 +1,7 @@
 """在线内参标定节点: 订阅 /camera/image_raw, 采样 -> 标定 -> 写 camera_info.yaml。
 
 用法:
-    ros2 run ros2_camera_pkg camera_node          # 先把图发出来
+    ros2 run camera camera_node          # 先把图发出来
     ros2 run camera_calib intrinsic_calib_node
 按键 (在预览窗口里按): 空格=手动采一张, c=开始标定, r=清空采样, q=退出。
 auto_capture=true 时会自动采合格且视角新的图, 你只要慢慢挪板子。
@@ -22,7 +22,7 @@ from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Image
 
 from camera_calib.intrinsic import SampleCollector, calibrate, save_camera_info, save_report
-from camera_calib.patterns import create_pattern
+from camera_calib.patterns import ChessboardPattern, CircleGridPattern, create_pattern
 
 
 def _config_dir() -> Path:
@@ -94,11 +94,11 @@ class IntrinsicCalibNode(Node):
             return
         preview = image.copy()
         self._pattern.draw(preview, detection)
-        cv2.putText(
-            preview,
-            f"samples={len(self._collector)}/{self._min_samples}  {self._last_reason}",
-            (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2,
-        )
+        if isinstance(self._pattern, (ChessboardPattern, CircleGridPattern)):
+            cv2.putText(
+                preview, f"{self._pattern.columns}x{self._pattern.rows}",
+                (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2,
+            )
         cv2.imshow("intrinsic_calib", preview)
         self._handle_key(cv2.waitKey(1) & 0xFF, gray)
 

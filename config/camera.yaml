@@ -1,18 +1,19 @@
-# 相机参数（camera_node 启动时直接读取本文件）
+# 相机参数
 # 相机选型（daheng/hik）
 type: hik
 
-# 共享内存发布（供 detector/solver 零拷贝取帧）；区域名/分辨率见 shm_pkg/config/shm.yaml
+# 共享内存发布（供 detector/solver 零拷贝取帧）；区域名/槽数见 config/shm.yaml, 槽位分辨率取当前相机的 width/height
 publish_shm: true
-shm_region: ""   # 空 = 用 shm_pkg 默认区域（wit_engineer_image）
+shm_region: ""   # 空 = 用 shm 默认区域（wit_engineer_image）
 
 hik_camera:
   sn: "DA3038934"
   fps: 200.0
-  width: 960
-  height: 720
+  # 输出分辨率; 共享内存槽位大小也按这里算
+  width: 1440
+  height: 1080
   binning: 1
-  exposure_us: 6000.0
+  exposure_us: 8500.0
   gain: 16.0
   bayer_mode: 0
   wb_mode: "continuous"

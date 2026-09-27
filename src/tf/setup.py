@@ -16,7 +16,6 @@ setup(
     maintainer_email="shaozi2233@gmail.com",
     description="坐标变换: 相机系位姿 -> arm_base 系 ExchangeStationPose + 静态 TF 广播",
     license="MIT",
-    tests_require=["pytest"],
     entry_points={
         "console_scripts": [
             "vision_tf_node = tf.vision_tf_node:main",

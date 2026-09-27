@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = "shm_pkg"
+package_name = "shm"
 
 setup(
     name=package_name,
@@ -14,9 +14,8 @@ setup(
     zip_safe=True,
     maintainer="sxh",
     maintainer_email="shaozi2233@gmail.com",
-    description="/dev/shm mmap 三缓冲共享图像: ros2_camera_pkg 生产, detector/solver 零拷贝消费, 绕开 DDS 大图拷贝",
+    description="/dev/shm mmap 三缓冲共享图像: camera 生产, detector/solver 零拷贝消费, 绕开 DDS 大图拷贝",
     license="MIT",
-    tests_require=["pytest"],
     entry_points={
         "console_scripts": [],
     },

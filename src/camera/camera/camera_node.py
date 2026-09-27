@@ -2,7 +2,7 @@
 发布 /camera/image_raw + /camera/camera_info。
 
 后端由 camera.yaml 的 `type` 决定, 也可用 ROS 参数覆盖:
-    ros2 run ros2_camera_pkg camera_node --ros-args -p type:=daheng
+    ros2 run camera camera_node --ros-args -p type:=daheng
 
 每个后端的参数放在同名子字典 (hik_camera / daheng_camera) 里, 与驱动
 HikCamera / DahengCamera 的构造参数一一对应。内参从 config/camera_info.yaml
@@ -52,14 +52,14 @@ def _build_driver(cam_type: str, params: dict, logger):
         kwargs["frame_rate"] = params["fps"]
 
     if cam_type == "hik":
-        from ros2_camera_pkg.hik_camera import HikCamera
+        from camera.hik_camera import HikCamera
         return HikCamera(**kwargs)
     if cam_type == "daheng":
         import sys
         pkg_root = str(Path(__file__).resolve().parents[1])
         if pkg_root not in sys.path:
             sys.path.append(pkg_root)
-        from ros2_camera_pkg.daheng_camera import DahengCamera
+        from camera.daheng_camera import DahengCamera
         return DahengCamera(**kwargs)
     raise ValueError(f"未知相机类型 type={cam_type!r} (支持: hik | daheng)")
 
@@ -91,26 +91,27 @@ def _build_camera_info(frame_id: str, logger) -> CameraInfo:
     return info
 
 
-def _build_shm_publisher(config: dict, logger):
-    """按 camera.yaml 的 publish_shm 建共享内存生产者; 关闭或 shm_pkg 缺失时返回 None。
+def _build_shm_publisher(config: dict, height: int, width: int, logger):
+    """按 camera.yaml 的 publish_shm 建共享内存生产者; 关闭或 shm 缺失时返回 None。
 
-    区域名/最大分辨率/槽数从 shm_pkg 的 config/shm.yaml 读, 与消费者对齐。
+    槽位分辨率用相机配置的 width/height (消费者从头部读尺寸);
+    区域名/通道/槽数从 config/shm.yaml 读, 与消费者对齐。
     """
     if not bool(config.get("publish_shm", True)):
         logger.info("publish_shm=false, 只发 ROS topic, 不写共享内存")
         return None
     try:
-        from shm_pkg import ImagePublisher, load_shm_config
+        from shm import ImagePublisher, load_shm_config
     except Exception as exc:
-        logger.warn(f"未找到 shm_pkg ({exc}), 跳过共享内存发布; 请先 build shm_pkg")
+        logger.warn(f"未找到 shm ({exc}), 跳过共享内存发布; 请先 build shm")
         return None
     cfg = load_shm_config()
     region = str(config.get("shm_region", "")).strip() or cfg.region
-    pub = ImagePublisher(region, cfg.max_height, cfg.max_width,
+    pub = ImagePublisher(region, height, width,
                          cfg.max_channels, cfg.numpy_dtype(), cfg.n_slots)
     logger.info(
         f"共享内存就绪: /dev/shm/{region} "
-        f"{cfg.max_height}x{cfg.max_width}x{cfg.max_channels} n_slots={cfg.n_slots}"
+        f"{height}x{width}x{cfg.max_channels} n_slots={cfg.n_slots}"
     )
     return pub
 
@@ -139,7 +140,13 @@ class CameraNode(Node):
         self._info_pub = self.create_publisher(
             CameraInfo, str(params.get("camera_info_topic", "/camera/camera_info")), 1
         )
+        width, height = int(params["width"]), int(params["height"])
         self._camera_info = _build_camera_info(self._frame_id, self.get_logger())
+        if self._camera_info.width and (self._camera_info.width, self._camera_info.height) != (width, height):
+            self.get_logger().warn(
+                f"camera_info.yaml 是 {self._camera_info.width}x{self._camera_info.height}, "
+                f"相机配置是 {width}x{height}; 内参与分辨率不匹配, 请按当前分辨率重新标定"
+            )
 
         self._driver = _build_driver(cam_type, params, self.get_logger())
         self._last_ts = None
@@ -148,11 +155,11 @@ class CameraNode(Node):
 
         # 共享内存生产者: 把每帧零拷贝写进 /dev/shm, 供 detector/solver 消费。
         # publish_shm 默认开; 关掉则只发 ROS topic (见 camera.yaml)。
-        self._shm_pub = _build_shm_publisher(config, self.get_logger())
+        self._shm_pub = _build_shm_publisher(config, height, width, self.get_logger())
 
         self.get_logger().info(
             f"相机后端: {cam_type} sn={params.get('sn') or '<auto>'} "
-            f"{int(params.get('width', 0))}x{int(params.get('height', 0))}@{self._publish_fps:g}fps"
+            f"{width}x{height}@{self._publish_fps:g}fps"
         )
         self._try_open(initial=True)
         self._timer = self.create_timer(1.0 / max(self._publish_fps, 1.0), self._on_timer)

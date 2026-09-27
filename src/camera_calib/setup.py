@@ -16,7 +16,6 @@ setup(
     maintainer_email="shaozi2233@gmail.com",
     description="相机标定: 棋盘格/ChArUco/圆点板 内参标定 + camera->arm_base 手眼外参标定",
     license="MIT",
-    tests_require=["pytest"],
     entry_points={
         "console_scripts": [
             "intrinsic_calib_node = camera_calib.intrinsic_calib_node:main",

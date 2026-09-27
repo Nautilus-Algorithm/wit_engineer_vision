@@ -16,7 +16,6 @@ setup(
     maintainer_email="shaozi2233@gmail.com",
     description="关键点检测 (OpenVINO): RM2026 yolopose 单阶段 或 yolo+litehrnet 两阶段, 出 KeypointObservationArray",
     license="MIT",
-    tests_require=["pytest"],
     entry_points={
         "console_scripts": [
             "detector_node = detector.detector_node:main",

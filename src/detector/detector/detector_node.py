@@ -1,5 +1,5 @@
 """薄 ROS 节点: 按 config/detector.yaml 的 `type` 选检测器 (tc | eu), 从共享内存
-(shm_pkg, 由 ros2_camera_pkg 相机节点写入) 零拷贝取帧, 推理后可视化 + 发布结果。
+(shm, 由 camera 相机节点写入) 零拷贝取帧, 推理后可视化 + 发布结果。
 
     type: tc  -> 兑换站 yolo-pose (OpenVINO), 出 KeypointObservation + 标注图
     type: eu  -> 能量单元/矿石 yolo detect (ultralytics), 出 标注图 (+ 日志)
@@ -126,7 +126,7 @@ class DetectorNode(Node):
         self._source = str(in_cfg.get("source", "shm")).lower()
         self._frame_id = str(in_cfg.get("frame_id", "camera"))
         if self._source == "shm":
-            from shm_pkg import ImageSubscriber, load_shm_config
+            from shm import ImageSubscriber, load_shm_config
             region = str(in_cfg.get("region", "")).strip() or load_shm_config().region
             self._sub = _open_shm(self, ImageSubscriber, region)
             self._region = region
@@ -146,7 +146,7 @@ class DetectorNode(Node):
     # ---------- 输入回调 ----------
     def _on_shm_timer(self) -> None:
         if self._sub is None:
-            from shm_pkg import ImageSubscriber
+            from shm import ImageSubscriber
             self._sub = _open_shm(self, ImageSubscriber, self._region)
             return
         frame = self._sub.try_recv(copy=True)  # copy: 推理期间防止槽被写者覆盖

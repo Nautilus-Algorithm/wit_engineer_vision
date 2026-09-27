@@ -1,11 +1,11 @@
-"""shm_pkg 纯算法测试: 同进程内开一个 Publisher + 一个 Subscriber, 映射同一块
+"""shm 纯算法测试: 同进程内开一个 Publisher + 一个 Subscriber, 映射同一块
 /dev/shm 区域, 验证收发一致性、三缓冲零拷贝语义、心跳判活与魔数校验。"""
 
 import numpy as np
 import pytest
 
-from shm_pkg import ImagePublisher, ImageSubscriber, ShmRegion
-from shm_pkg import layout
+from shm import ImagePublisher, ImageSubscriber, ShmRegion
+from shm import layout
 
 
 REGION = "wit_engineer_test_region"  # 测试专用名, 避免撞到真实相机区域
@@ -41,7 +41,7 @@ def test_roundtrip_single_frame(region_name):
 
 
 def test_no_new_frame_returns_none(region_name):
-    with ImagePublisher(region_name) as pub, ImageSubscriber(region_name) as sub:
+    with ImagePublisher(region_name, 100, 100, 3) as pub, ImageSubscriber(region_name) as sub:
         pub.publish(_make_frame(100, 100, 7))
         assert sub.try_recv() is not None
         assert sub.try_recv() is None  # 同一帧不会被读第二次
@@ -103,7 +103,7 @@ def test_oversized_frame_rejected(region_name):
 
 
 def test_heartbeat_alive(region_name):
-    with ImagePublisher(region_name) as pub, ImageSubscriber(region_name) as sub:
+    with ImagePublisher(region_name, 100, 100, 3) as pub, ImageSubscriber(region_name) as sub:
         pub.heartbeat()
         assert sub.is_producer_alive()
         assert sub.wait_for_producer(timeout_s=0.5)

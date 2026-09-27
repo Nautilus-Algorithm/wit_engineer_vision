@@ -2,15 +2,15 @@
 # 后端由 type 切换; 也可用 ROS 参数覆盖:
 #   ros2 run detector detector_node --ros-args -p type:=eu
 
-# tc = 兑换站/科技核心 关键点 (yolo-pose, OpenVINO)  ← 纯 OpenVINO 即可运行
-# eu = 能量单元/矿石 目标检测 (yolo detect)  ← 默认指向 OpenVINO IR, 纯 OpenVINO 运行;
+# tc = 兑换站/科技核心 关键点 (yolo-pose, OpenVINO)
+# eu = 能量单元/矿石 目标检测 (yolo detect)
 #      模型指向 .pt 时改走 ultralytics
 type: eu
 
 # ---- 输入源: 共享内存 (相机节点写入) ----
 input:
   source: shm                 # shm | topic
-  region: ""                  # 空 = 用 shm_pkg/config/shm.yaml 的默认区域
+  region: ""                  # 空 = 用 shm/config/shm.yaml 的默认区域
   poll_hz: 200.0              # 轮询共享内存的频率 (Hz)
   frame_id: "camera"
   image_topic: "/camera/image_raw"   # source=topic 时订阅

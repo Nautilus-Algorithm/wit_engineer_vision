@@ -9,7 +9,7 @@
 
 用法:
     from planning import load_config, ArmModel, Type3Planner
-    cfg = load_config()                 # 读包内 config/planning.example.yaml
+    cfg = load_config()                 # 读工作区根 config/planning.yaml
     arm = ArmModel.from_config(cfg["arm"])
 """
 

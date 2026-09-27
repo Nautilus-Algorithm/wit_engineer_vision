@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = "ros2_camera_pkg"
+package_name = "camera"
 
 setup(
     name=package_name,
@@ -16,10 +16,9 @@ setup(
     maintainer_email="shaozi2233@gmail.com",
     description="相机驱动: 海康(MVS)/大恒(gxipy) 后端可换, 出 /camera/image_raw + /camera/camera_info",
     license="MIT",
-    tests_require=["pytest"],
     entry_points={
         "console_scripts": [
-            "camera_node = ros2_camera_pkg.camera_node:main",
+            "camera_node = camera.camera_node:main",
         ],
     },
 )

@@ -16,7 +16,6 @@ setup(
     maintainer_email="shaozi2233@gmail.com",
     description="PnP 解算: 关键点 schema 映射 + solvePnPRansac + 滤波, 出相机系兑换站 6D 位姿",
     license="MIT",
-    tests_require=["pytest"],
     entry_points={
         "console_scripts": [
             "pnp_node = solver.pnp_node:main",

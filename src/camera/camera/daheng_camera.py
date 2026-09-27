@@ -46,8 +46,8 @@ class DahengCamera:
     def __init__(
         self,
         sn: str,
-        width: int = 960,
-        height: int = 720,
+        width: int,
+        height: int,
         binning: int = 1,
         exposure_us: float = 10000.0,
         gain: float = 19.0,

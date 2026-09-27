@@ -1,4 +1,6 @@
-"""读工作区根 config/shm.yaml, 缺失时回退到内置默认 —— 让区域名/最大分辨率/槽数走配置。
+"""读工作区根 config/shm.yaml, 缺失时回退到内置默认 —— 让区域名/通道/槽数走配置。
+
+槽位分辨率不在这里: 由生产者 (相机节点) 按 config/camera.yaml 的 width/height 决定并写进头部。
 
 配置统一集中在工作区根 config/ (wit_engineer_vision/config/), 各包不再各装一份到 share。
 image_transport 本身不依赖它, 这里只是给节点一个统一的配置入口, 保持仓库"数据驱动"的约定。
@@ -17,8 +19,6 @@ from . import layout
 @dataclass
 class ShmConfig:
     region: str = layout.DEFAULT_REGION
-    max_height: int = 720
-    max_width: int = 960
     max_channels: int = 3
     n_slots: int = 3
     dtype: str = "uint8"
@@ -49,8 +49,6 @@ def load_shm_config(path: Path | None = None) -> ShmConfig:
         with open(path, "r", encoding="utf-8") as fh:
             data = (yaml.safe_load(fh) or {}).get("image", {})
         cfg.region = str(data.get("region", cfg.region))
-        cfg.max_height = int(data.get("max_height", cfg.max_height))
-        cfg.max_width = int(data.get("max_width", cfg.max_width))
         cfg.max_channels = int(data.get("max_channels", cfg.max_channels))
         cfg.n_slots = int(data.get("n_slots", cfg.n_slots))
         cfg.dtype = str(data.get("dtype", cfg.dtype))

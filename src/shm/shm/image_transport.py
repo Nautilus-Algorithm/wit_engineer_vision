@@ -1,6 +1,6 @@
 """共享内存图像收发的高层 API —— 纯逻辑, 零 ROS 依赖, 可 pytest。
 
-- ImagePublisher: 生产者 (ros2_camera_pkg 相机节点), 把每帧写进三缓冲的下一个槽,
+- ImagePublisher: 生产者 (camera 相机节点), 把每帧写进三缓冲的下一个槽,
   最后自增 seq 发布。写者只写一份到共享内存 (相机帧 -> shm 这次拷贝无法避免)。
 - ImageSubscriber: 消费者 (detector / solver), 用 seqlock 读到一致的一帧。
   返回的 Frame.image 默认是**零拷贝** numpy 视图, 直接落在共享内存上。
@@ -49,9 +49,9 @@ class ImagePublisher:
 
     def __init__(
         self,
-        name: str = layout.DEFAULT_REGION,
-        max_height: int = 720,
-        max_width: int = 960,
+        name: str,
+        max_height: int,
+        max_width: int,
         max_channels: int = 3,
         dtype: np.dtype = np.uint8,  # type: ignore[assignment]
         n_slots: int = 3,
