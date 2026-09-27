@@ -1,0 +1,62 @@
+<!-- 兑换站实体 (仅可视), 由 scene.xml 用 <attach> 挂进场景.
+     网格原样拷自 RM2026-Engineer-Assembly-Algorithm
+     (arm_exchange_sim/model/model/exchange_station/tech/), 配色照抄它的 exchange_station.xml.
+     站体 dark/glow 与 planning 碰撞检测共用 (config/planning.yaml 的 collision.station.asset_dir);
+     桩子 (科技核心) 的碰撞用 exchange_column_collision.obj, 这里只挂它的可视网格.
+     单独成文件是因为 scene.xml 的 compiler 为了 include 描述文件开了 strippath,
+     站体 mesh 的路径没法和臂的 mesh 共用一个 meshdir; attach 进来的子模型用自己的 compiler.
+
+     坐标系: body 原点 = 站体系 (planning 的 station pose, 即"完全插入"时的 TCP 位姿),
+     x 轴是插入轴 (矿石沿 −x 压进去, 待插位姿在 +x 一侧).
+     网格 -> 站体系的旋转与 planning/collision.py 的 _MESH_TO_STATION_ROTATION 一致:
+     [[0,1,0],[1,0,0],[0,0,-1]], 即 quat (w,x,y,z) = (0, √½, √½, 0),
+     等价于 RM2026 的 euler="3.14 0 -1.57".
+     body 的 pos/quat 是占位, sim_node 启动时覆写. contype/conaffinity=0: 不参与接触
+     (planning 的碰撞检测默认关, 轨迹可能穿过站体, 不碰才不会"臂顶着站体抽搐").
+
+     RM2026 里桩子挂在 M/P/Q 三个关节 (step3_slide/p_axis/q_axis) 下面, 可以随 type3 动;
+     这里还没做站体关节, 先单独成一个静止子 body (零位 = RM2026 关节全 0 时的位置),
+     以后要动就在 exchange_column 上加关节. 螺丝和大红块在 RM2026 里本来就挂在站体上. -->
+<mujoco model="exchange_station">
+  <compiler angle="radian" meshdir="."/>
+
+  <asset>
+    <mesh name="exchange_station_dark" file="exchange_station_dark.obj"/>
+    <mesh name="exchange_station_glow" file="exchange_station_glow.obj"/>
+    <mesh name="exchange_column_dark" file="exchange_column_dark.obj"/>
+    <mesh name="exchange_column_screw" file="exchange_column_screw.obj"/>
+    <mesh name="exchange_column_light_red" file="exchange_column_light_red.obj"/>
+    <mesh name="exchange_column_main_red" file="exchange_column_main_red.obj"/>
+    <mesh name="exchange_column_em_base" file="exchange_column_em_base.obj"/>
+    <mesh name="exchange_column_em_ring" file="exchange_column_em_ring.obj"/>
+  </asset>
+
+  <default>
+    <default class="station_visual">
+      <geom type="mesh" quat="0 0.7071067811865476 0.7071067811865476 0"
+            contype="0" conaffinity="0" condim="1" mass="0"/>
+    </default>
+  </default>
+
+  <worldbody>
+    <body name="exchange_station" pos="0.5 0 0.6">
+      <!-- rgba 全部与 RM2026 exchange_station.xml 一致 -->
+      <geom name="station_dark" class="station_visual" mesh="exchange_station_dark" rgba="0.05 0.05 0.05 1"/>
+      <geom name="station_glow" class="station_visual" mesh="exchange_station_glow" rgba="1 1 1 1"/>
+      <geom name="column_screw" class="station_visual" mesh="exchange_column_screw" rgba="0.5 0.5 0.5 1"/>
+      <geom name="column_main_red" class="station_visual" mesh="exchange_column_main_red" rgba="0.9 0.1 0.1 1"/>
+
+      <body name="exchange_column">
+        <geom name="column_dark" class="station_visual" mesh="exchange_column_dark" rgba="0.05 0.05 0.05 1"/>
+        <geom name="column_light_red" class="station_visual" mesh="exchange_column_light_red" rgba="0.9 0.1 0.1 1"/>
+        <geom name="column_em_base" class="station_visual" mesh="exchange_column_em_base" rgba="0.15 0.08 0.03 0.7"/>
+        <geom name="column_em_ring" class="station_visual" mesh="exchange_column_em_ring" rgba="0.41 0.41 0.41 1"/>
+      </body>
+
+      <site name="station_site" pos="0 0 0" size="0.008" rgba="1 0 0 1"/>
+      <!-- 插入轴 (站体 x), 画在 +x 一侧 = 待插位姿所在的方向 -->
+      <site name="station_axis" pos="0.05 0 0" quat="0.7071067811865476 0 0.7071067811865476 0"
+            size="0.004 0.05" type="cylinder" rgba="1 0 0 0.6"/>
+    </body>
+  </worldbody>
+</mujoco>

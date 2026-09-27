@@ -1,6 +1,7 @@
 <!-- rm26 工程机器人仿真场景.
      地面 / 灯光 / 相机都在 rm26_arm.xml 里自带, 这里只补三样:
-       1. 兑换站占位 (仅可视, 位姿由 sim_node 启动时按 FK 覆写, 见 doc/ 的设计 §六);
+       1. 兑换站实体 (exchange_station/exchange_station.xml, 仅可视,
+          位姿由 sim_node 启动时覆写, 见 doc/ 的设计 §六);
        2. 把底盘焊在世界系 (不焊 3 秒漂 226 mm, arm_base 系就废了);
        3. 一个 compiler 覆盖, 解 include 的 mesh 路径 (见下面注释).
      ⚠️ rm26_engineer_description/rm26_arm.xml 不要改 —— planning 的
@@ -9,18 +10,14 @@
 
   <include file="rm26_engineer_description/rm26_arm.xml"/>
 
+  <asset>
+    <model name="exchange_station" file="exchange_station/exchange_station.xml"/>
+  </asset>
+
   <worldbody>
-    <!-- 兑换站: pos/quat 是占位, sim_node 会写 model.body_pos/body_quat.
-         class="visualgeom" => contype=0 conaffinity=0, 不参与接触.
-         本轮 planning 的碰撞检测是关的, 轨迹可能穿过站体; 让它不碰,
-         画面才不会出现"臂顶着站体抽搐". 等碰撞资产补齐再换实体几何. -->
-    <body name="exchange_station" pos="0.5 0 0.6" quat="1 0 0 0">
-      <geom name="station_box" class="visualgeom" type="box" size="0.10 0.10 0.02"
-            rgba="0.95 0.70 0.15 0.9"/>
-      <site name="station_site" pos="0 0 0" size="0.008" rgba="1 0 0 1"/>
-      <site name="station_axis" pos="0 0 0.05" size="0.004 0.05" type="cylinder"
-            rgba="1 0 0 0.6"/>
-    </body>
+    <!-- 兑换站: 子模型自带 compiler/meshdir (理由见该文件头), prefix 为空 ->
+         body/site 名不变 (exchange_station / station_site), sim_node 按名字覆写位姿. -->
+    <attach model="exchange_station" body="exchange_station" prefix=""/>
   </worldbody>
 
   <!-- ⚠️ 必须排除"底盘 <-> 臂各节"的接触.

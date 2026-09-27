@@ -62,6 +62,15 @@ __all__ = [
 
 
 @lru_cache(maxsize=1)
+def _workspace_root() -> Path | None:
+    """向上查找同时含 ``config/`` 与 ``src/`` 的工作区根; 找不到返回 None。"""
+    here = Path(__file__).resolve()
+    return next(
+        (p for p in here.parents if (p / "config").is_dir() and (p / "src").is_dir()),
+        None,
+    )
+
+
 def load_config(path: str | Path | None = None) -> dict[str, Any]:
     """读取规划配置。
 
@@ -74,11 +83,7 @@ def load_config(path: str | Path | None = None) -> dict[str, Any]:
     if path is not None:
         config_path = Path(path)
     else:
-        here = Path(__file__).resolve()
-        root = next(
-            (p for p in here.parents if (p / "config").is_dir() and (p / "src").is_dir()),
-            None,
-        )
+        root = _workspace_root()
         workspace_config = root / "config" / "planning.yaml" if root is not None else None
         config_path = (
             workspace_config

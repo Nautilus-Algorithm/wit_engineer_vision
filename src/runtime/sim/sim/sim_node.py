@@ -158,8 +158,7 @@ class SimNode(Node):
             world_T_station[:3, :3] = _rpy_to_mat(*[float(v) for v in explicit[3:6]])
         else:
             world_T_station = self._station_from_joint(
-                np.asarray(cfg.get("from_joint") or np.zeros(6), dtype=float),
-                float(cfg.get("standoff_m", 0.25)))
+                np.asarray(cfg.get("from_joint") or np.zeros(6), dtype=float))
 
         # 覆写静态 body 的 pos/quat (静态 body 的 xpos 每次 mj_forward 由 model 算出)
         bid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, "exchange_station")
@@ -187,10 +186,12 @@ class SimNode(Node):
             f"相对 arm_base {np.round(rel[:3, 3], 4).tolist()} "
             f"(距离 {np.linalg.norm(rel[:3, 3]):.3f} m)")
 
-    def _station_from_joint(self, q: np.ndarray, standoff: float) -> np.ndarray:
-        """用一组演示关节角做 FK: 第 6 DH 系沿工具轴 (z) 前进 standoff 就是站体原点。
+    def _station_from_joint(self, q: np.ndarray) -> np.ndarray:
+        """用一组演示关节角做 FK, 取那一刻的 TCP 位姿当站体系。
 
-        这样站姿必然落在工作空间里, demo 不会第一步就 IK 无解。
+        与 planning 的约定一致: 站体系 = 矿石"完全插入"时的 TCP 位姿 (type3 状态 0),
+        x 轴是插入轴。 所以 from_joint 就是一组"插到底"的关节角, 站姿必然可达。
+        TCP = 第 6 DH 系 + 工具偏置 (旋转相同), 工具偏置读 planning 的配置 (见 _tool_offset)。
         """
         m, d = self.engine.model, self.engine.data
         with self.engine.lock:
@@ -205,9 +206,24 @@ class SimNode(Node):
             mujoco.mj_forward(m, d)
 
         world_T_frame6 = world_T_link6 @ np.linalg.inv(self._C)
-        advance = np.eye(4)
-        advance[2, 3] = standoff
-        return world_T_frame6 @ advance
+        frame6_T_tcp = np.eye(4)
+        frame6_T_tcp[:3, 3] = self._tool_offset()
+        return world_T_frame6 @ frame6_T_tcp
+
+    def _tool_offset(self) -> np.ndarray:
+        """planning 配置里的 tcp_offset_6_tcp (第 6 DH 系 -> TCP 的平移)。
+
+        读 planning 自己的配置, 不在 config/sim.yaml 里抄一份 —— 工具偏置是规划侧的
+        标定量, 一处一个真值。 读不到 (没装 planning) 就按 0, 站姿会差一个工具偏置。
+        """
+        try:
+            from planning import load_config
+            return np.asarray(load_config()["arm"]["tool"]["tcp_offset_6_tcp"], dtype=float)
+        except Exception as exc:                                 # noqa: BLE001
+            self.get_logger().warn(
+                f"读不到 planning 的 tcp_offset_6_tcp ({exc}), 按 0 处理: "
+                "站姿会偏一个工具偏置, planning 侧可能 IK 无解")
+            return np.zeros(3)
 
     def _world_T_arm_base(self) -> np.ndarray:
         """arm_base 在 J1 转轴上, 不是 base_link; line = 0 时是常量 (见设计文档 §六)。"""

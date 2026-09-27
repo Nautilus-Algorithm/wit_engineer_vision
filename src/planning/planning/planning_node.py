@@ -16,9 +16,9 @@ trajectory_msgs/JointTrajectory (位置/速度/加速度/time_from_start 齐全)
 
 位姿一律在 arm_base 系; 关节名取 rm26_arm 的 J1..J6 (与 URDF/MJCF 一致)。
 
-【性能】config 里 arm.use_analytic_ik=false (rm26_arm 是偏置腕, 解析 IK 不适用),
-数值 IK 约 16 ms/次。 装配段一次请求要解 path_samples × roll 数 次 IK, 默认
-10 × 72 ≈ 15 s; 嫌慢就调小 assembly.path_samples 或调大 assembly.roll_step_deg。
+【性能】config 里 arm.ik_type=rm26_arm (专用闭式解, 单目标单分支约 7 ms, 批量每支
+约 0.1 ms)。 装配段一次请求要解 path_samples × roll 数 次 IK, 批量一次解完;
+ik_type=numeric 时约 16 ms/次, 默认 10 × 72 ≈ 15 s。
 
 超参默认全部来自 config/planning.example.yaml, 可用 ROS 参数逐项覆盖:
     ros2 run planning planning_node --ros-args -p assembly.path_samples:=6
@@ -185,16 +185,16 @@ class PlanningNode(Node):
         self.assembly_roll_step_deg = self._declare_float(
             "assembly.roll_step_deg", joint_path_cfg["roll_sample_step_deg"]
         )
-        # 接近段 IK 的分支: 数值 IK 下"分支"只是不同初值, 多撒几个初值成功率明显更高,
-        # 故默认 8 个全上 (一次约 0.2 s); 装配段建图只吃单分支, 用 config 的 ik_branches。
+        # 接近段 IK 的分支: 默认 8 个全上 (闭式解下是 8 个几何分支, 数值 IK 下是 8 个初值),
+        # 取第一个有效解; 装配段建图只吃单分支, 用 config 的 ik_branches。
         self.declare_parameter("approach.ik_branches", [0, 1, 2, 3, 4, 5, 6, 7])
         self.approach_ik_branches = tuple(
             int(value) for value in self.get_parameter("approach.ik_branches").value
         )
         if not self.approach_ik_branches:
             raise ValueError("approach.ik_branches 不能为空")
-        # 碰撞检测默认关: 依赖 hpp-fcl 与 planning/assets/collision/*.obj,
-        # 本仓库暂无这些网格资产 (见 config 的 collision.station), 开了会直接构不出来。
+        # 碰撞检测默认关: 依赖 hpp-fcl 与站体网格 (config 的 collision.station.asset_dir,
+        # 即 src/runtime/sim/model/exchange_station/)。 资产与胶囊已齐, 打开前先跑一遍规划回归。
         self.declare_parameter("collision.enabled", False)
         self.collision_enabled = bool(self.get_parameter("collision.enabled").value)
 
@@ -247,7 +247,7 @@ class PlanningNode(Node):
 
         self.get_logger().info(
             "planning_node 就绪 "
-            f"use_analytic_ik={bool(arm_cfg.get('use_analytic_ik', True))} "
+            f"ik_type={self.arm.ik_type} "
             f"type3_ik_branch={ik_branches[0]} "
             f"roll_count={len(self.type3_planner.rolls)} "
             f"assembly_path_samples={self.assembly_path_samples} "

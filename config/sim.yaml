@@ -36,11 +36,12 @@ gripper:
 station:
   publish_pose: true                # 是否发真值站姿 /vision/exchange_pose
   pose_hz: 5.0
-  # 站体位姿的来法: 用这组"演示关节角"做 MuJoCo FK 得到第 6 DH 系,
-  # 再沿工具轴 (DH z6) 前进 standoff_m 作为站体原点。 这样站姿必然可达,
-  # demo 不会第一步就 IK 无解。 这组角同样落在 MJCF range ∩ planning limits 内。
-  from_joint: [0.4, 0.8, 0.9, 0.8, 0.6, 0.0]
-  standoff_m: 0.25
+  # 站体位姿的来法: 用这组"插到底"的演示关节角做 MuJoCo FK, 取 TCP 位姿当站体系
+  # (与 planning 的约定一致: 站体系 = 完全插入时的 TCP, x 是插入轴, 待插位姿在 +x 一侧;
+  # 工具偏置读 planning 的 arm.tool.tcp_offset_6_tcp)。 这组角挑的是: 站体 z 近似竖直、
+  # 插入轴水平、站体网格不穿地; 沿 +x 退 0~0.25 m 整段闭式 IK branch 4 都有解。
+  # 落在 MJCF range ∩ planning limits 内。
+  from_joint: [-0.25, 1.971, 1.341, 0.364, 0.257, 0.293]
   pose_xyz_rpy: null                # 显式给 [x,y,z,r,p,y] 则覆盖上面两项 (调试用)
 
 mount:

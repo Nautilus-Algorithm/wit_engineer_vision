@@ -8,9 +8,14 @@
 # 保持"一处一个真值"。
 
 arm:
-  # 是否用解析 IK:
-  # true  -> 用 arm_model 的解析 IK (一次向量化出 8 分支, 极快, 但只对"球腕"成立);
-  # false -> 自动退化成数值 IK (scipy least_squares 逐个解, 通用, 慢一些)。
+  # IK 解法 (arm_model.IK_TYPES), 分支号含义随解法不同, 换了要同步下面各处 ik_branches:
+  #   rm26_arm        -> rm26_arm 专用闭式解 (J3/J4/J5 三轴共点), 向量化出 8 分支;
+  #                      branch = 4·[s6<0] + 2·[s2<0] + [s4<0], 真解多落在 0 / 4。
+  #                      见 docs/2026-09-26-rm26-arm-wrist-structure-and-closed-form-ik.md
+  #   spherical_wrist -> 标准球腕解析解 (J4/J5/J6 三轴共点的臂), 对 rm26_arm 不成立;
+  #   numeric         -> scipy least_squares 逐个解, 与臂型无关, 慢 (约 16 ms/次), "分支"只是初值。
+  ik_type: rm26_arm
+  # 旧开关, 只在没写 ik_type 时生效 (true -> spherical_wrist, false -> numeric)。
   use_analytic_ik: false
 
   dh:
@@ -78,6 +83,10 @@ arm:
 
 collision:
   station:
+    # 兑换站碰撞网格所在目录, 相对工作区根。 3 个 .obj 取自参考项目
+    # RM2026-Engineer-Assembly-Algorithm 的 arm_exchange_core/assets/collision/ (原样拷贝),
+    # 站体局部系, 单位米。 与 sim 共用一处, 不在 planning 包里另存一份。
+    asset_dir: src/runtime/sim/model/exchange_station
     meshes:
       - asset: exchange_station_dark.obj
       - asset: exchange_station_glow.obj
@@ -146,7 +155,9 @@ collision:
 
 planning:
   exchange:
-    ik_branches: [7]
+    # type3 建图只吃单分支。 编号按 arm.ik_type=rm26_arm 的闭式解 (见上), 与旧数值 IK 的
+    # 初值编号无关 (旧值 7 在闭式解下几乎不出真解)。
+    ik_branches: [0]
     approach:
       duration_s: 2.0
       sample_dt: 0.001

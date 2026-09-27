@@ -16,6 +16,9 @@ setup(
          glob("model/rm26_engineer_description/*.xml")),
         ("share/" + package_name + "/model/rm26_engineer_description/meshes",
          glob("model/rm26_engineer_description/meshes/*")),
+        # 兑换站子模型 (scene.xml 用 <attach> 挂进来) 与它的 obj; planning 的碰撞网格也读这里
+        ("share/" + package_name + "/model/exchange_station",
+         glob("model/exchange_station/*.xml") + glob("model/exchange_station/*.obj")),
     ],
     install_requires=["setuptools", "mujoco", "numpy"],
     zip_safe=True,

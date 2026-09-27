@@ -1,9 +1,8 @@
 """planning 移植冒烟测试: 验证导入链、FK、type3 全流程可跑通。
 
-config/planning.example.yaml 的 arm.dh 已换成 rm26_arm 的实测 DH。 DH 的数值正确性
-由 test_dh_mujoco.py 拿 MuJoCo 回代验证; 本文件只验证代码通路与结构性结论。
-rm26_arm 是偏置腕 (非球腕), 解析 solve_ik 不适用 —— 见 README 第六节; config 里
-arm.use_analytic_ik=false 时 solve_ik 自动走数值兜底, 正逆解算往返仍能闭环。
+config/planning.yaml 的 arm.dh 是 rm26_arm 的实测 DH。 DH 的数值正确性由
+test_dh_mujoco.py 拿 MuJoCo 回代验证; 闭式 IK 的正确性由 test_closed_form_ik.py 验证;
+本文件只验证代码通路 (按 config 的 arm.ik_type 走)。
 """
 
 from __future__ import annotations
@@ -39,23 +38,24 @@ def test_forward_kinematics_shape(arm: ArmModel):
     np.testing.assert_allclose(fk.tcp_transforms[0, 3], [0, 0, 0, 1], atol=1e-9)
 
 
-def test_ik_round_trip_numeric(arm: ArmModel):
+@pytest.mark.parametrize("ik_type", ["config", "numeric"])
+def test_ik_round_trip(config: dict, ik_type: str):
     """正逆解算往返: FK 得目标位姿 -> solve_ik 反解关节角 -> 再 FK 应复现同一位姿。
 
-    rm26_arm 是偏置腕 (后三轴不汇交), 解析 IK 的球腕假设不成立; config 里
-    ``arm.use_analytic_ik=false`` 时 solve_ik 自动退化为数值解 (scipy least_squares,
-    README 第六节 6.3 迁移路线)。 本测试验证这条数值通路能把位姿解回来。
+    分别走 config 里的 ``arm.ik_type`` (rm26_arm 闭式解) 与数值兜底。
     """
+    arm_cfg = config["arm"] if ik_type == "config" else dict(config["arm"], ik_type=ik_type)
+    arm = ArmModel.from_config(arm_cfg)
     q = np.array([0.3, 0.8, 1.0, 0.2, 0.3, 0.1], dtype=float)
     target = arm.forward_kinematics(q[None, :]).tcp_transforms  # (1,4,4)
 
-    # 请求 4 个分支 (不同初值撒开), 只要有一个既有效又能复现即算往返成功。
-    joints, valid = arm.solve_ik(target, branches=list(range(4)))
-    assert joints.shape == (1, 4, 6)
-    assert valid[0].any(), "数值 IK 未能解出任何有效关节角"
+    # 请求全部 8 个分支, 只要有一个既有效又能复现即算往返成功 (本例闭式解真解在 branch 4)。
+    joints, valid = arm.solve_ik(target, branches=list(range(8)))
+    assert joints.shape == (1, 8, 6)
+    assert valid[0].any(), f"{arm.ik_type} IK 未能解出任何有效关节角"
 
     reproduced = False
-    for k in range(4):
+    for k in range(8):
         if not valid[0, k]:
             continue
         fk = arm.forward_kinematics(joints[0, k][None, :]).tcp_transforms[0]
@@ -67,7 +67,7 @@ def test_ik_round_trip_numeric(arm: ArmModel):
         if position_ok and rotation_ok:
             reproduced = True
             break
-    assert reproduced, "数值 IK 解出的关节角未能复现目标位姿 (正逆解算未闭环)"
+    assert reproduced, f"{arm.ik_type} IK 解出的关节角未能复现目标位姿 (正逆解算未闭环)"
 
 
 def _make_planner(arm: ArmModel, config: dict) -> Type3Planner:

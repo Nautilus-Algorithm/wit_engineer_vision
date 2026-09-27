@@ -13,9 +13,12 @@
 
 【本项目现状 —— 重要】
 - 碰撞是可选的: type2 和 type3 都接受 collision_checker=None, 先不开也能跑通。
-- 要开碰撞, 需要两样本仓库暂时没有的东西:
-    1) 兑换站的碰撞网格 .obj 资产 (放到 planning/assets/collision/);
-    2) 臂各段胶囊参数 (config 里的 collision.arm.capsules), 也要按你这台臂改。
+- 要开碰撞需要两样东西, 现在都齐了:
+    1) 兑换站的碰撞网格 .obj: 在 src/runtime/sim/model/exchange_station/,
+       由 config 的 collision.station.asset_dir 指过去 (相对工作区根; 不写则找包内
+       planning/assets/collision/);
+    2) 臂各段胶囊参数 (config 里的 collision.arm.capsules), 已按 rm26_arm 拟合,
+       见 test/test_arm_capsules.py。
 - 依赖 hpp-fcl (系统级)。 本机环境已统一到 numpy 1.24.4, hpp-fcl 可正常导入使用
   (别把 numpy 升到 2.x, 否则会段错误; 详见 README 环境说明)。
 """
@@ -93,24 +96,45 @@ class CollisionModel:
         )
         if not capsules:
             raise ValueError("collision model requires at least one arm capsule")
+        asset_dir = _asset_dir(station.get("asset_dir"))
         return cls(
-            station_meshes=_asset_paths(station["meshes"], required=True),
+            station_meshes=_asset_paths(station["meshes"], asset_dir, required=True),
             local_exchange_meshes=_asset_paths(
-                station.get("local_exchange_meshes", ()), required=False
+                station.get("local_exchange_meshes", ()), asset_dir, required=False
             ),
             arm_capsules=capsules,
         )
 
 
-def _asset_paths(entries: Sequence[dict], *, required: bool) -> tuple[Path, ...]:
-    paths = tuple(_collision_asset(entry["asset"]) for entry in entries)
+def _asset_dir(configured: str | None) -> Path:
+    """站体网格目录: config 的 ``collision.station.asset_dir`` (相对路径按工作区根解析),
+    没写就用包内 ``assets/collision/``。"""
+    if not configured:
+        return Path(str(files("planning") / "assets" / "collision"))
+    path = Path(configured)
+    if not path.is_absolute():
+        from . import _workspace_root
+
+        root = _workspace_root()
+        if root is None:
+            raise FileNotFoundError(
+                f"collision.station.asset_dir 是相对路径 {configured!r}, 但找不到工作区根"
+            )
+        path = root / path
+    return path
+
+
+def _asset_paths(
+    entries: Sequence[dict], asset_dir: Path, *, required: bool
+) -> tuple[Path, ...]:
+    paths = tuple(_collision_asset(asset_dir, entry["asset"]) for entry in entries)
     if required and not paths:
         raise ValueError("collision model requires at least one station mesh")
     return paths
 
 
-def _collision_asset(filename: str) -> Path:
-    path = Path(str(files("planning") / "assets" / "collision" / filename))
+def _collision_asset(asset_dir: Path, filename: str) -> Path:
+    path = asset_dir / filename
     if not path.is_file():
         raise FileNotFoundError(f"collision asset does not exist: {path}")
     return path

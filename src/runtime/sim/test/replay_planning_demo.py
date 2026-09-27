@@ -4,7 +4,8 @@
 流程 (设计文档 §九):
     1. 等 /mcu/arm/state            -> start_joint
     2. 等 /vision/exchange_pose     -> 站姿 (frame_id=arm_base, 正是 planning 要的系)
-    3. 站姿沿自身 -z 退 retract 米作为待插位姿, 发 ApproachRequest
+    3. 站姿沿自身 +x (插入轴, 与 planning 的站体约定一致) 退 retract 米作为待插
+       TCP 位姿, 发 ApproachRequest
     4. 收到 /plan/approach/result 后, 按 time_from_start 以 100 Hz 采样,
        逐点发 /host/arm/command (control_mode=1)
     5. 打印跟踪误差
@@ -131,20 +132,6 @@ class DemoNode(Node):
         self.cmd_pub.publish(msg)
 
 
-def tool_offset() -> np.ndarray:
-    """planning 配置里的 tcp_offset_6_tcp (第 6 DH 系 -> TCP 的平移)。
-
-    读 planning 自己的配置而不是在 config/sim.yaml 里抄一份 —— 工具偏置是规划侧的
-    标定量, 一处一个真值。 读不到就退回 0, 并在日志里说清楚。
-    """
-    try:
-        from planning import load_config
-        return np.asarray(load_config()["arm"]["tool"]["tcp_offset_6_tcp"], dtype=float)
-    except Exception as exc:                                     # noqa: BLE001
-        print(f"[warn] 读不到 planning 的 tcp_offset_6_tcp ({exc}), 按 0 处理")
-        return np.zeros(3)
-
-
 def sample(traj, t: float) -> tuple[np.ndarray, np.ndarray]:
     """按 time_from_start 在稠密轨迹上线性插值出 (位置, 速度)。
 
@@ -198,7 +185,7 @@ def replay(node: DemoNode, traj, rate_hz: float) -> float:
 def main() -> int:
     ap = argparse.ArgumentParser(description="sim + planning 粗接演示")
     ap.add_argument("--retract", type=float, default=0.25,
-                    help="待插位姿: 沿站体 -z 退多少米 (默认与 sim 的 standoff_m 一致)")
+                    help="待插位姿: 沿站体 +x (插入轴) 退多少米")
     ap.add_argument("--rate", type=float, default=100.0, help="回放频率 Hz")
     ap.add_argument("--plan-timeout", type=float, default=60.0, help="等规划结果秒数")
     args = ap.parse_args()
@@ -221,20 +208,15 @@ def main() -> int:
 
         start = node.joints
         T_station = pose_to_mat(node.station.pose)
+        # sim 的站姿就是"插到底"时的 TCP 位姿 (见 sim_node._station_from_joint),
+        # 沿站体 +x 退出去就是待插位姿, 直接当 ApproachRequest.target_pose (TCP)。
         retract = np.eye(4)
-        retract[2, 3] = -args.retract
-        T_frame6 = T_station @ retract          # 待插位姿, 按第 6 DH 系
-
-        # ⚠️ ApproachRequest.target_pose 是 **TCP** 位姿, 而 sim 的站姿是按第 6 DH 系
-        # 定的 (sim 只认 MuJoCo, 不该知道 planning 的工具参数)。 差的这个工具偏置
-        # 属于 planning 的标定量, 所以在消费侧 (这里) 补上。 不补就会 IK 无解。
-        T_target = T_frame6.copy()
-        T_target[:3, 3] += T_frame6[:3, :3] @ tool_offset()
+        retract[0, 3] = args.retract
+        T_target = T_station @ retract
 
         log.info(f"起始关节 {np.round(start, 3).tolist()}")
         log.info(f"站姿 (arm_base) {np.round(T_station[:3, 3], 4).tolist()}, "
-                 f"待插 frame6 {np.round(T_frame6[:3, 3], 4).tolist()}, "
-                 f"目标 TCP {np.round(T_target[:3, 3], 4).tolist()}")
+                 f"待插 TCP {np.round(T_target[:3, 3], 4).tolist()}")
 
         req = ApproachRequest()
         req.header.stamp = node.get_clock().now().to_msg()

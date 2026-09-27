@@ -20,6 +20,8 @@
   <exec_depend>python3-yaml</exec_depend>
   <!-- demo 脚本 test/replay_planning_demo.py 要用 -->
   <exec_depend>trajectory_msgs</exec_depend>
+  <!-- sim_node 读 planning 的工具偏置定站姿 (读不到退回 0 并告警) -->
+  <exec_depend>planning</exec_depend>
 
 
   <export>
