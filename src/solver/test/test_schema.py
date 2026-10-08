@@ -57,6 +57,44 @@ def test_schema_rejects_unknown_name_and_bad_observation_count(tmp_path: Path):
         schema.points_for_observation(3)
 
 
+PARTS_SCHEMA = """station:
+  keypoints:
+    A: [0, 0, 0]
+    B: [1, 0, 0]
+    C: [0, 1, 0]
+    D: [0, 0, 1]
+  parts:
+    first: {class_id: 0, keypoints: [A, B]}
+    second: {class_id: 1, keypoints: [C, D]}
+"""
+
+
+def test_schema_parts_map_class_ids_to_slots(tmp_path: Path):
+    path = tmp_path / "schema.yaml"
+    path.write_text(PARTS_SCHEMA, encoding="utf-8")
+    schema = load_schema(path, "station")
+    assert schema.class_id is None
+    assert dict(schema.parts) == {0: (0, 1), 1: (2, 3)}
+
+
+def test_single_class_schema_owns_every_slot(tmp_path: Path):
+    path = tmp_path / "schema.yaml"
+    path.write_text("x: {class_id: 4, keypoints: {A: [0, 0, 0], B: [1, 0, 0]}}\n", encoding="utf-8")
+    assert dict(load_schema(path, "x").parts) == {4: (0, 1)}
+
+
+@pytest.mark.parametrize("old, new, message", [
+    ("[C, D]", "[B, D]", "more than one part"),
+    ("[C, D]", "[C, E]", "unknown keypoint"),
+    ("class_id: 1", "class_id: 0", "class_id"),
+])
+def test_schema_rejects_invalid_parts(tmp_path: Path, old, new, message):
+    path = tmp_path / "schema.yaml"
+    path.write_text(PARTS_SCHEMA.replace(old, new), encoding="utf-8")
+    with pytest.raises(ValueError, match=message):
+        load_schema(path, "station")
+
+
 def test_schema_rejects_nonfinite_point(tmp_path: Path):
     path = tmp_path / "schema.yaml"
     path.write_text(

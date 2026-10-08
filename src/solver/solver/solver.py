@@ -37,6 +37,8 @@ class PnPEstimator:
         self.confidence_threshold = float(confidence_threshold)
         self.reprojection_error_threshold_px = float(reprojection_error_threshold_px)
         self.min_inliers = int(min_inliers)
+        if self.min_inliers < 4:
+            raise ValueError("min_inliers must be at least four")
         self.use_ransac = bool(use_ransac)
 
     def estimate(self, object_points_m, image_points_px, camera_matrix,
@@ -73,7 +75,12 @@ class PnPEstimator:
             selected = np.arange(count)
         if len(obj) < self.min_inliers:
             return _invalid(count, f"at least four points are required; got {len(obj)}")
-        if np.linalg.matrix_rank(obj - obj.mean(axis=0)) < 2:
+        centered = obj - obj.mean(axis=0)
+        singular_values = np.linalg.svd(centered, compute_uv=False)
+        if singular_values.size < 3 or singular_values[0] <= 0:
+            return _invalid(count, "object point geometry is degenerate")
+        # 共面点集 (如兑换口 7 点) PnP 可解; 只拒绝共线/近共线。
+        if singular_values[1] / singular_values[0] < 1e-3:
             return _invalid(count, "object point geometry is degenerate")
 
         try:

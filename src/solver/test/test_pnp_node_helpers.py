@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from solver.pnp_node import _camera_info_to_arrays, _observation_to_arrays
+from solver.pnp_node import _FrameBuffer, _camera_info_to_arrays, _observation_to_arrays
 
 
 class Header:
@@ -44,6 +44,22 @@ def test_observation_conversion_rejects_mismatched_arrays(field):
     setattr(message, field, [1.0])
     with pytest.raises(ValueError, match="parallel"):
         _observation_to_arrays(message)
+
+
+def test_frame_buffer_releases_frame_when_newer_stamp_arrives():
+    buffer = _FrameBuffer(timeout_s=0.05)
+    assert buffer.add((1, 0), "a", now=0.00) == []
+    assert buffer.add((1, 0), "b", now=0.01) == []
+    assert buffer.add((2, 0), "c", now=0.02) == [((1, 0), ["a", "b"])]
+    assert buffer.flush(now=0.03) == []
+    assert buffer.flush(now=0.08) == [((2, 0), ["c"])]
+
+
+def test_frame_buffer_drops_late_message_of_released_frame():
+    buffer = _FrameBuffer(timeout_s=0.05)
+    buffer.add((2, 0), "new", now=0.0)
+    assert buffer.add((1, 0), "late", now=0.01) == []
+    assert buffer.flush(now=1.0) == [((2, 0), ["new"])]
 
 
 def test_camera_info_conversion_rejects_bad_intrinsics():

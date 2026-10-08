@@ -1,31 +1,44 @@
 # 数据驱动关键点 schema: 名字 -> 3D 模型点。新目标 = 新增条目, 不改代码。
 #
-# 名字必须与模型 metadata.yaml 里的 kpt_names 完全一致 (RM2026 yolopose 的 12 个点),
-# 权重路径不在这里 —— 那是 keypoint_detector/config/detector.yaml 的事, 一处一个真值。
+# 条目名 = detector.yaml 里 tc.schema; 点的顺序必须与 tc.keypoint_names 完全一致
+# (KeypointObservation 只带平行数组, 不带点名, solver 按这里的顺序配对)。
+# 权重路径不在这里 —— 那是 config/detector.yaml 的事, 一处一个真值。
 #
-# 单位: 米。坐标系: 目标自身坐标系, 原点取兑换口中心, X 右 Y 下 Z 朝外 (与相机光学系同向,
-# 这样 PnP 出来的 R 接近单位阵, 调试时一眼能看出对不对)。
-# 参考: BIT pnp_solver_pkg/config/world_points.yaml (那份是毫米, 搬过来要 /1000)
+# 来源: ~/RM2026-Engineer-Assembly-Algorithm
+#   runtime/core/arm_exchange_core/system_config.example.yaml -> keypoint_schemas.exchange_12pt
+# 已核对与其 Blender 渲染配置 src/blender/configs/example.yaml (训练标注所用几何) 一致:
+#   X = z_blender - 0.112, Y = x_blender, Z = y_blender。
+# 这是仿真/渲染模型几何, 尚未对照官方图纸或实物复测。
+#
+# 单位: 米。坐标系 station_model (沿用 RM2026 exchange_12pt):
+#   原点 = ring 点; X = 插入/深度方向 (兑换面位于 X < 0 一侧);
+#   Y、Z 在兑换面内 (Y 对应 Blender x, Z 对应 Blender y)。
+# 与 sim 装配系 station_assembly 的固定变换仍需核对, 不能假定为单位阵。
+#
+# tc (yolo-pose, kpt_shape [12, 3]) 对每个实例都输出 12 槽, 训练标签为
+# (RM2026 src/blender/pipeline/compose_dataset.py):
+#   class 0 pillar:   [5 个 pillar 点 | 7 个 padding]
+#   class 1 exchange: [5 个 padding   | 7 个 exchange 点]
+# parts 声明每个 class_id 负责的槽位; solver/pairing.py 把同一帧的 pillar + exchange
+# 实例拼成 12 点后一次 PnP (等价于 RM2026 的 exchange_12pt), 只看到一类时用该类的点降级求解。
 
-pillar:                      # class_id 0
-  class_id: 0
-  keypoints:                 # TODO: 按 RM2026 官方图纸实测填写
-    # TL:   [x, y, z]
-    # TR:   [x, y, z]
-    # BL:   [x, y, z]
-    # BR:   [x, y, z]
-    # ring: [x, y, z]
-
-exchange:                    # class_id 1
-  class_id: 1
-  keypoints:                 # TODO: 按 RM2026 官方图纸实测填写
-    # light_BR: [x, y, z]
-    # light_TR: [x, y, z]
-    # shell_R:  [x, y, z]
-    # shell_M:  [x, y, z]
-    # shell_L:  [x, y, z]
-    # light_TL: [x, y, z]
-    # light_BL: [x, y, z]
+exchange_station:
+  parts:
+    pillar:   {class_id: 0, keypoints: [TL, TR, BL, BR, ring]}
+    exchange: {class_id: 1, keypoints: [light_BR, light_TR, shell_R, shell_M, shell_L, light_TL, light_BL]}
+  keypoints:
+    TL:       [-0.100000, -0.040000,  0.040000]
+    TR:       [-0.100000,  0.040000,  0.040000]
+    BL:       [-0.100000, -0.040000, -0.040000]
+    BR:       [-0.100000,  0.040000, -0.040000]
+    ring:     [ 0.000000,  0.000000,  0.000000]
+    light_BR: [-0.112000,  0.114870,  0.035953]
+    light_TR: [-0.112000,  0.114870,  0.167312]
+    shell_R:  [-0.112000,  0.084871,  0.276449]
+    shell_M:  [-0.112000,  0.000000,  0.325449]
+    shell_L:  [-0.112000, -0.084871,  0.276449]
+    light_TL: [-0.112000, -0.114870,  0.167312]
+    light_BL: [-0.112000, -0.114870,  0.035953]
 
 # 发射机构 :
 # launcher:

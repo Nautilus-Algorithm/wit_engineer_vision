@@ -2,7 +2,8 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from types import MappingProxyType
+from typing import Any, Mapping, Optional
 
 import numpy as np
 import yaml
@@ -10,10 +11,17 @@ import yaml
 
 @dataclass(frozen=True)
 class KeypointSchema:
+    """一个目标的完整关键点表。
+
+    ``parts`` 把 detector 的 class_id 映射到它负责的槽位下标: 单类别 schema 由该类别
+    拥有全部槽位; 组合 schema (如 pillar + exchange) 由多个类别实例拼成完整点集。
+    """
+
     name: str
-    class_id: int
+    class_id: Optional[int]
     names: tuple[str, ...]
     object_points: np.ndarray
+    parts: Optional[Mapping[int, tuple[int, ...]]] = None
 
     def __post_init__(self) -> None:
         points = np.asarray(self.object_points, dtype=np.float64)
@@ -24,6 +32,21 @@ class KeypointSchema:
         points = np.ascontiguousarray(points)
         points.setflags(write=False)
         object.__setattr__(self, "object_points", points)
+
+        if self.parts is None:
+            if self.class_id is None:
+                raise ValueError("schema needs class_id or parts")
+            parts = {int(self.class_id): tuple(range(len(self.names)))}
+        else:
+            parts = {int(cid): tuple(int(i) for i in slots) for cid, slots in self.parts.items()}
+        used: set[int] = set()
+        for cid, slots in parts.items():
+            if not slots or any(i < 0 or i >= len(self.names) for i in slots):
+                raise ValueError(f"part for class_id {cid} has invalid slots")
+            if used & set(slots):
+                raise ValueError("a keypoint belongs to more than one part")
+            used |= set(slots)
+        object.__setattr__(self, "parts", MappingProxyType(parts))
 
     def points_for_observation(self, count: int) -> np.ndarray:
         if count != len(self.names):
@@ -37,6 +60,15 @@ def _as_mapping(value: Any, label: str) -> dict[str, Any]:
     return value
 
 
+def _as_int(value: Any, label: str) -> int:
+    if isinstance(value, bool):
+        raise ValueError(f"{label} must be an integer")
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{label} must be an integer") from exc
+
+
 def load_schema(path: str | Path, name: str) -> KeypointSchema:
     with Path(path).open("r", encoding="utf-8") as stream:
         document = yaml.safe_load(stream)
@@ -47,12 +79,27 @@ def load_schema(path: str | Path, name: str) -> KeypointSchema:
     keypoints = entry.get("keypoints")
     if not isinstance(keypoints, dict) or not keypoints:
         raise ValueError(f"schema {name} keypoints must be a non-empty mapping")
-    try:
-        class_id = int(entry["class_id"])
-    except (KeyError, TypeError, ValueError) as exc:
-        raise ValueError(f"schema {name} class_id must be an integer") from exc
-
     names = tuple(str(point_name) for point_name in keypoints)
+
+    class_id = None
+    if "class_id" in entry or "parts" not in entry:
+        class_id = _as_int(entry.get("class_id"), f"schema {name} class_id")
+    parts = None
+    if "parts" in entry:
+        parts = {}
+        for part_name, part in _as_mapping(entry["parts"], f"schema {name} parts").items():
+            part = _as_mapping(part, f"part {part_name}")
+            part_class = _as_int(part.get("class_id"), f"part {part_name} class_id")
+            if part_class in parts:
+                raise ValueError(f"part {part_name} reuses class_id {part_class}")
+            members = part.get("keypoints")
+            if not isinstance(members, list) or not members:
+                raise ValueError(f"part {part_name} keypoints must be a non-empty list")
+            unknown = [m for m in members if str(m) not in names]
+            if unknown:
+                raise ValueError(f"part {part_name} has unknown keypoint {unknown}")
+            parts[part_class] = tuple(names.index(str(m)) for m in members)
+
     rows = []
     for point_name, value in keypoints.items():
         if not isinstance(value, (list, tuple)) or len(value) != 3:
@@ -64,4 +111,4 @@ def load_schema(path: str | Path, name: str) -> KeypointSchema:
         if not np.isfinite(point).all():
             raise ValueError(f"keypoint {point_name} must be finite")
         rows.append(point)
-    return KeypointSchema(name, class_id, names, np.asarray(rows, dtype=np.float64))
+    return KeypointSchema(name, class_id, names, np.asarray(rows, dtype=np.float64), parts)
