@@ -1,10 +1,7 @@
 # sim 后端 (MuJoCo) 参数 —— 仓库根 config/ 是配置的唯一真源。
-# 设计依据见 src/runtime/sim/doc/2026-09-25-sim-backend-design.md。
-# 每一项都能被同名 ROS 参数覆盖 (点分路径), 例如:
-#   ros2 run sim sim_node --ros-args -p arm.kp:="[400.0,400.0,200.0,80.0,60.0,30.0]"
 
 model:
-  scene: scene.xml                  # 相对 share/sim/model/
+  scene: scene.xml                  
 
 physics:
   timestep: null                    # null = 用 MJCF 自带的 0.001 s

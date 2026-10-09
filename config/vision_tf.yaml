@@ -1,7 +1,7 @@
 # camera_optical -> arm_base 外参, 以及位姿输出参数。
 #
 # 这里只放外参: 内参在 camera 包 config/camera_info.yaml (由 camera_calib 标出来),
-# 3D 模型点在 pnp_solver 包 config/keypoint_schema.yaml。一处一个真值。
+# 3D 模型点在 pnp_solver 包 config/keypoint_schema.yaml。
 # 外参由 camera_calib 的手眼标定生成 (camera_calib/config/hand_eye.yaml -> extrinsic.yaml),
 # 标完把 4x4 填到下面, 或用 extrinsic_file 直接指向标定输出。
 
