@@ -1,4 +1,4 @@
-type: hik # (daheng/hik）
+type: video # (daheng/hik/video）
 # 共享内存发布（供 detector/solver 零拷贝取帧）；区域名/槽数见 config/shm.yaml, 槽位分辨率取当前相机的 width/height
 publish_shm: true
 shm_region: ""   # 空 = 用 shm 默认区域（wit_engineer_image）
@@ -46,3 +46,16 @@ daheng_camera:
   frame_id: "camera"
   camera_info_topic: "/camera/camera_info"
 
+video_camera:
+  # 视频文件路径 (也可 --ros-args -p video_path:=...)
+  path: "assets/video/test1.mp4"
+  # 输出分辨率; 0 = 用视频原生分辨率。非 0 则逐帧缩放, 内参须与输出分辨率一致
+  width: 0
+  height: 0
+  # 回放帧率; 0 = 用视频文件自带帧率
+  fps: 0.0
+  loop: true
+  start_frame: 0
+  no_frame_timeout_s: 3.0
+  frame_id: "camera"
+  camera_info_topic: "/camera/camera_info"

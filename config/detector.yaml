@@ -1,7 +1,7 @@
 # detector_node
 # tc = 兑换站/科技核心 关键点 (yolo-pose, OpenVINO)
 # eu = 能量单元/矿石 目标检测 (yolo detect)
-type: eu
+type: tc
 
 # ---- 输入源: 共享内存 ----
 input:

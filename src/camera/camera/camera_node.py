@@ -1,8 +1,9 @@
-"""薄 ROS 节点: 按 config/camera.yaml 选相机后端 (hik | daheng), 取流后
+"""薄 ROS 节点: 按 config/camera.yaml 选相机后端 (hik | daheng | video), 取流后
 发布 /camera/image_raw + /camera/camera_info。
 
 后端由 camera.yaml 的 `type` 决定, 也可用 ROS 参数覆盖:
     ros2 run camera camera_node --ros-args -p type:=daheng
+    ros2 run camera camera_node --ros-args -p type:=video -p video_path:=/path/to/a.mp4
 
 每个后端的参数放在同名子字典 (hik_camera / daheng_camera) 里, 与驱动
 HikCamera / DahengCamera 的构造参数一一对应。内参从 config/camera_info.yaml
@@ -28,6 +29,8 @@ DRIVER_KEYS = (
     "bayer_mode", "trigger_enable", "trigger_source",
     "wb_mode", "wb_r", "wb_g", "wb_b",
 )
+# video 后端的构造参数 (VideoCamera.__init__)
+VIDEO_KEYS = ("path", "width", "height", "loop", "start_frame")
 
 
 def _config_dir() -> Path:
@@ -46,11 +49,15 @@ def _load_yaml(path: Path) -> dict:
 def _build_driver(cam_type: str, params: dict, logger):
     """按 type 惰性导入对应驱动并构造。惰性导入: 只加载真正用到的 SDK,
     跑 hik 时不会因为缺 gxipy 而失败, 反之亦然。"""
-    kwargs = {k: params[k] for k in DRIVER_KEYS if k in params}
+    keys = VIDEO_KEYS if cam_type == "video" else DRIVER_KEYS
+    kwargs = {k: params[k] for k in keys if k in params}
     # config 用 fps 表示目标帧率, 驱动构造参数名是 frame_rate
     if "fps" in params:
         kwargs["frame_rate"] = params["fps"]
 
+    if cam_type == "video":
+        from camera.video_camera import VideoCamera
+        return VideoCamera(**kwargs)
     if cam_type == "hik":
         from camera.hik_camera import HikCamera
         return HikCamera(**kwargs)
@@ -61,7 +68,7 @@ def _build_driver(cam_type: str, params: dict, logger):
             sys.path.append(pkg_root)
         from camera.daheng_camera import DahengCamera
         return DahengCamera(**kwargs)
-    raise ValueError(f"未知相机类型 type={cam_type!r} (支持: hik | daheng)")
+    raise ValueError(f"未知相机类型 type={cam_type!r} (支持: hik | daheng | video)")
 
 
 def _build_camera_info(frame_id: str, logger) -> CameraInfo:
@@ -127,6 +134,11 @@ class CameraNode(Node):
         cam_type = (str(self.get_parameter("type").value).strip() or config_type).lower()
 
         params = dict(config.get(f"{cam_type}_camera", {}))
+        # video 后端可用 ROS 参数直接指定文件, 不必改 yaml
+        self.declare_parameter("video_path", "")
+        video_path = str(self.get_parameter("video_path").value).strip()
+        if cam_type == "video" and video_path:
+            params["path"] = video_path
         self._frame_id = str(params.get("frame_id", "camera"))
         self._publish_fps = float(params.get("fps", 30.0))
         self._retry_interval_s = float(params.get("retry_interval_s", 2.0))
@@ -140,7 +152,11 @@ class CameraNode(Node):
         self._info_pub = self.create_publisher(
             CameraInfo, str(params.get("camera_info_topic", "/camera/camera_info")), 1
         )
-        width, height = int(params["width"]), int(params["height"])
+        self._driver = _build_driver(cam_type, params, self.get_logger())
+        # 分辨率以驱动为准: video 的 width/height=0 表示用视频原生尺寸
+        width, height = int(self._driver.width), int(self._driver.height)
+        if cam_type == "video":
+            self._publish_fps = float(self._driver.frame_rate)
         self._camera_info = _build_camera_info(self._frame_id, self.get_logger())
         if self._camera_info.width and (self._camera_info.width, self._camera_info.height) != (width, height):
             self.get_logger().warn(
@@ -148,7 +164,6 @@ class CameraNode(Node):
                 f"相机配置是 {width}x{height}; 内参与分辨率不匹配, 请按当前分辨率重新标定"
             )
 
-        self._driver = _build_driver(cam_type, params, self.get_logger())
         self._last_ts = None
         self._last_frame_monotonic = time.monotonic()
         self._last_retry_monotonic = 0.0
@@ -158,11 +173,14 @@ class CameraNode(Node):
         self._shm_pub = _build_shm_publisher(config, height, width, self.get_logger())
 
         self.get_logger().info(
-            f"相机后端: {cam_type} sn={params.get('sn') or '<auto>'} "
+            f"相机后端: {cam_type} "
+            f"{('path=' + str(params.get('path'))) if cam_type == 'video' else ('sn=' + str(params.get('sn') or '<auto>'))} "
             f"{width}x{height}@{self._publish_fps:g}fps"
         )
         self._try_open(initial=True)
-        self._timer = self.create_timer(1.0 / max(self._publish_fps, 1.0), self._on_timer)
+        # video: 解码线程已按帧率出帧, 定时器 2 倍频轮询, 避免同频拍频漏帧
+        poll_hz = self._publish_fps * (2.0 if cam_type == "video" else 1.0)
+        self._timer = self.create_timer(1.0 / max(poll_hz, 1.0), self._on_timer)
 
     # ---------- 取流与重连 ----------
     def _try_open(self, initial: bool = False) -> bool:
@@ -188,6 +206,10 @@ class CameraNode(Node):
     def _on_timer(self) -> None:
         if not self._driver.is_connected():
             self._try_open()
+            return
+
+        # 视频不循环且已放完: 停发, 不当成掉线重启
+        if getattr(self._driver, "is_finished", lambda: False)():
             return
 
         now_monotonic = time.monotonic()

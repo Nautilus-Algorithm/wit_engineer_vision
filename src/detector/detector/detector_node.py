@@ -54,13 +54,17 @@ def _load_yaml(path: Path) -> dict:
 def _resolve_model(rel_or_abs: str) -> str:
     """模型路径解析: 绝对路径原样用; 相对路径相对 detector/model 目录。
 
-    权重体积大且 .gitignore 排除, 不进 install; 用 --symlink-install 时 __file__
-    指向源码, model/ 就在源码树里。找不到时报清晰错误。
+    权重体积大且 .gitignore 排除, 不进 install; 依次找包源码目录、工作区
+    src/detector/model、install share。找不到时报清晰错误。
     """
     path = Path(rel_or_abs)
     if path.is_absolute():
         return str(path)
     candidates = [_source_dir() / "model" / rel_or_abs]
+    # 普通 colcon build (拷贝安装) 下 __file__ 在 install/ 里, 再回工作区源码树找
+    workspace_model = _config_dir().parent / "src" / PACKAGE_NAME / "model" / rel_or_abs
+    if workspace_model not in candidates:
+        candidates.append(workspace_model)
     try:
         candidates.append(Path(get_package_share_directory(PACKAGE_NAME)) / "model" / rel_or_abs)
     except Exception:
